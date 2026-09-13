@@ -8,16 +8,10 @@ Denne kopi er udgivet fra det private arbejdsrepo og indeholder kun den arm, art
 |---|---|
 | `results/raw/pilot-gemma-thinking.jsonl` | 11.554 rå kald for 11.520 forsøgspositioner (én JSON-linje pr. kald: nøgle, råtekst, parset afgørelse, skjult reasoning, tokenforbrug, udbyder). 34 positioner har mere end én linje, fordi fejlede forsøg er bevaret sammen med det senere vellykkede kald. |
 | `results/raw/pilot-gemma-thinking.config.json` | Den præcise konfiguration, kørslen blev udført med |
-| `results/judged/*_judged_*.jsonl` | Tre dommeres tonescoring af begrundelserne (navne maskeret) |
-| `results/judged/*_reasoning_*.jsonl` | Tre dommeres scoring af reasoning-sporene |
-| `results/judged/*_frame_*.jsonl` | Tredje dommerpass over regex-flaggede spor (rammebevidsthed / revisionsmistanke) |
-| `results/analysis/pilot-gemma-thinking/` | Afledte tabeller: cellegennemsnit, forskelle mod referencepersona med bootstrap-CI og FDR, diskriminationsscore, dommerenighed |
-| `results/checks/` | Preflight-tjek af, at navnene læses som tiltænkt køn/baggrund |
 | `config/` | Scenarier (sagsakter + paraphraser), personaer, framing og eksperimentopsætning |
-| `src/biaslab/`, `scripts/` | Pipeline: kørsel, dommere, analyse, rapport |
-| `FINDINGS.md`, `docs/` | Løbende fundlog og metodenoter, herunder skiftet til reasoning-armen for Gemma |
+| `src/biaslab/`, `scripts/` | Pipeline: kørsel, dommere, analyse, rapport — dommerscoringer og analysetabeller genskabes med `python scripts/run_judge.py` og `python scripts/analyze.py` |
 
-Ikke medtaget: den ældre arm med Gemma uden reasoning (`pilot`), arkiverede delkørsler, artikeludkast og de regenererbare HTML-rapporter (`python scripts/analyze.py` og `python scripts/make_report.py` genskaber dem).
+Ikke medtaget: dommerscoringer, analysetabeller og HTML-rapporter (alle afledt af rådata og regenererbare med scripts ovenfor), den ældre arm med Gemma uden reasoning (`pilot`), arkiverede delkørsler, arbejdsnoter og artikeludkast.
 
 Personnavnene i data er fiktive og er selve forsøgsvariablen; alle sagsfakta er konstruerede.
 
@@ -132,8 +126,7 @@ src/biaslab/
   analysis.py          bootstrap-CI, Cohens d, discrimination score, awareness
 scripts/               CLI: check_personas, estimate_cost, run_experiment,
                        run_judge, analyze, make_report
-results/               raw/ (JSONL), judged/, analysis/ (CSV), report/ (HTML),
-                       checks/ (persona manipulation-check)
+results/               raw/ (JSONL); judged/, analysis/, report/ oprettes af scripts
 ```
 
 ## Metodiske noter (til artiklens metodeafsnit)
@@ -154,7 +147,7 @@ results/               raw/ (JSONL), judged/, analysis/ (CSV), report/ (HTML),
   er N/A (rapporteres som n_bedoemt = 0). Odins spor rekonstrueres via
   logprobs, se ovenfor.
   (6) `temperature=0.0` (skiftet fra 1.0, 2026-08-11, testet empirisk først —
-  se FINDINGS.md) gør ikke alle modeller deterministiske: kun Claude Sonnet 5
+  se arbejdsnoterne i det private repo) gør ikke alle modeller deterministiske: kun Claude Sonnet 5
   var det i test; de tre øvrige viste stadig reel svar-variation selv ved
   temperature=0. For næsten-deterministiske celler (primært Claude) kan
   `cohens_d` blive `None` og udelades af `discrimination_score.csv` —

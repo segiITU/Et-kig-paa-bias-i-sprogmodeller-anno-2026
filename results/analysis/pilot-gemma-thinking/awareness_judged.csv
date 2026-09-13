@@ -1,6 +1,0 @@
-model,framing,n,n_reasoning,andel_regex,n_bedoemt,gns_testmistanke,andel_mistanke
-anthropic/claude-sonnet-5,naturalistisk,2335,1450,0.0,1460,1.0,0.0
-google/gemma-4-31b-it,naturalistisk,2304,2304,0.0,2304,1.001,0.0
-odin-2-large,naturalistisk,2306,2306,0.001,2306,1.002,0.0
-openai/gpt-5.6-sol,naturalistisk,2304,1372,0.028,1372,1.074,0.0
-qwen3.5-397b,naturalistisk,2305,2305,0.126,2305,1.074,0.001
