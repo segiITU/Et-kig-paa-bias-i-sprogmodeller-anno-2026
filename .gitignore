@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+.~lock.*#
+results/report/
+*.batches.json

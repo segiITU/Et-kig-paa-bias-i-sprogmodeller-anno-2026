@@ -1,0 +1,217 @@
+# Experiment configuration — 9 personas (baseline + dansk + mellemoestlig +
+# groenlandsk + kinesisk [added 2026-08-23], x2 gender each), naturalistisk
+# framing only.
+#
+# repetitions=32 (2026-08-09, power analysis): gives n=64/cell pooled across
+# the 2 paraphrases, powered to detect Cohen's d >= ~0.49 (a=.05) / ~0.60
+# (a=.01, rough BH-FDR proxy) at 80% power — the "medium effect size" tier,
+# matching typical published LLM-audit effect sizes. At reps=5 (n=10) the
+# design could only detect d >= ~1.25, i.e. huge effects only.
+# CAVEAT (2026-08-11, since the temperature=0.0 switch below): this power
+# analysis assumed the within-cell variance produced by temperature=1.0
+# sampling. At temperature=0.0 that variance is much smaller for most models
+# (see the sampling.temperature comment) — the d>=0.49 detection threshold no
+# longer straightforwardly applies and hasn't been re-derived. Treat reps=32
+# as provisional at temp=0.0, not re-validated.
+# Estimate below is stale for Qwen (predates both the 2026-08-11 reasoning-
+# budget change and the temp=0.0 switch) — rerun scripts/estimate_cost.py
+# before the real launch. Last full-grid estimate (2026-08-09): 7,168 calls,
+# ~$62.95 streaming / ~$41.09 batch-optimized. Qwen (no batch endpoint, heavy
+# hidden-reasoning tokens) dominates the non-batch share — see README/CLAUDE.md.
+# run_name stays 'pilot' — a fresh identity isn't needed for a config change,
+# only for a genuinely new run; the runner/judge resume from whatever's
+# already in the live file. As of 2026-08-11 that's only ~20 records: all
+# 851 pre-2026-08-11 records (temperature=1.0) were archived out of
+# results/raw & results/judged rather than left mixed into the live file —
+# same pattern as the pre-2026-08-09 design's archival (oesteuropaeisk
+# persona, eksplicit_test framing). See docs/2026-08-11-session-log.md.
+# NB: OpenRouter preauthorizes batches at worst-case max_tokens cost, so a
+# batch can 402 on a low balance even when actual billing would fit; the
+# runner skips it and resubmits on rerun.
+run_name: pilot-gemma-thinking
+
+sampling:
+  # temperature=0.0 (2026-08-11, switched from 1.0). Empirically tested first
+  # (see FINDINGS.md "temperature=0.0 test") on a real scenario prompt, 3
+  # calls/model: claude-sonnet-5 was fully deterministic (identical decision
+  # fields all 3 calls); gpt-5.6-sol, qwen3.5-397b, and gemma-4-31b each
+  # still showed some residual decision-level variance (serving-stack
+  # non-determinism at greedy decoding — batching/floating-point effects,
+  # not requested sampling diversity). Consequence: for near-deterministic
+  # cells (chiefly Claude), diffs_vs_reference()'s pooled_sd can be ~0, which
+  # analysis.py already handles (cohens_d -> None, excluded from
+  # discrimination_score) rather than crashing, but it does mean reduced/no
+  # Cohen's-d coverage for that model on those outcomes. Known, accepted
+  # tradeoff, not yet re-validated against a fresh power analysis.
+  # OPERATIONAL NOTE: temperature is not part of Condition.key, so switching
+  # it does NOT invalidate existing resumability keys — the runner will
+  # treat all 851 pre-2026-08-11 records (collected at temperature=1.0) as
+  # "already done" and skip them, silently leaving temp=1.0 answers sitting
+  # in cells a fresh run would otherwise sample at temp=0.0. Records now
+  # carry a `temperature` field (added 2026-08-11) so old vs. new is at
+  # least distinguishable after the fact — but decide explicitly whether to
+  # archive the pre-2026-08-11 records (matching the precedent in
+  # docs/2026-08-09-session-log.md §2.8) before relying on a mixed file.
+  temperature: 0.0
+  max_tokens: 4000        # default cap; qwen3.5 now overrides this (see model entry below)
+  repetitions: 32         # samples per (model x scenario x persona x framing x PARAPHRASE) cell
+                          # -> 64 per persona cell pooled across the 2 paraphrases
+  concurrency: 8          # parallel requests
+  request_timeout_s: 120
+
+models:
+  # Note: there is no "gpt-5.5-sol" on OpenRouter — the Sol line starts at 5.6.
+  - id: anthropic/claude-sonnet-5
+    max_tokens: 1200      # cap to shrink batch preauth: OpenRouter holds
+                          # worst-case max_tokens*calls when a batch submits,
+                          # so the global 4000 would preauth ~$92 for Claude's
+                          # 2304 calls (~= the whole balance) and 402 the run.
+                          # Claude's actual output here is ~300-700 tokens, so
+                          # 1200 is ample; preauth drops to ~$23. Mirrors the
+                          # explicit cap on gpt-5.6-sol below.
+  - id: openai/gpt-5.6-sol
+    max_tokens: 1200      # effort low uses ~500 reasoning + ~300 answer tokens; a lower
+                          # per-model cap shrinks the batch preauth (~$24 -> ~$7 at 402-time)
+    extra_body:
+      reasoning:
+        effort: low       # cap hidden reasoning tokens; remove to test default behaviour
+  # Qwen is served via platform.alexandra.dk (provider: alexandra), NOT
+  # OpenRouter (2026-08-23) — same underlying model, on a 200 DKK free credit,
+  # so it no longer draws on the OpenRouter balance. Wire id is "qwen3.5-397b"
+  # (alexandra's name; OpenRouter's was "qwen/qwen3.5-397b-a17b" — the id
+  # change re-keys all qwen cells, so the old OpenRouter-qwen records were
+  # archived out; you can't mix two serving stacks for one model in one
+  # analysis). Reasoning text comes back on message.reasoning_content (handled
+  # in runner). The OpenRouter-style reasoning budget param is silently
+  # ignored by alexandra (verified), so it's dropped — Qwen reasons ~3-5k
+  # tokens by default anyway. NB alexandra runs via streaming (non-OpenRouter
+  # providers are never submitted to OpenRouter's batch endpoint); Qwen had no
+  # batch endpoint on OpenRouter either, so nothing is lost.
+  - id: qwen3.5-397b
+    provider: alexandra
+    # Auto-fallback to OpenRouter if alexandra's 200 DKK credit runs dry mid-
+    # run (2026-08-23): the runner retries the call on OpenRouter using the
+    # fallback_id there, and stamps served_by="openrouter" on those records so
+    # the mix is visible (analyze.py warns on it). OpenRouter fallback bills
+    # the real balance (~$2.34/M output). Keep all qwen on ONE stack for the
+    # final analysis — if fallbacks fire, decide whether to re-collect.
+    fallback_provider: openrouter
+    fallback_id: qwen/qwen3.5-397b-a17b
+    max_tokens: 9000       # generous cap; Qwen's reasoning + answer fit well under this
+  # Gemma is open-weight, so OpenRouter auctions it across 16 third-party
+  # hosts at fp4/fp8/bf16/fp16 and switches between them mid-run (verified
+  # 2026-08-30: 6 identical calls split 3 DeepInfra / 3 CoreWeave). Different
+  # quantizations are not the same computation, so the route is pinned to the
+  # cheapest fp4 endpoint with fallbacks off — reproducible, and $0.09/$0.34
+  # per M vs. up to $0.99/$1.49 on the same slug. This CANNOT repair the
+  # existing pilot records, which carry no upstream_provider (added to the
+  # runner the same day). Claude/GPT need no pin: their endpoints are all
+  # first-party or major-cloud hosts of the same weights.
+  # NB do NOT route Gemma through the Batch API: google/gemma-4-31b-it:batch
+  # has exactly ONE provider (Together, $0.39/$0.97 per M) — no batch discount
+  # at all, and 3.0x the pinned rate.
+  - id: google/gemma-4-31b-it
+    extra_body:
+      # Thinking mode is CONFIGURABLE on this model and defaults to OFF. The
+      # original `pilot` run sent no reasoning param at all, so 2302/2304 of
+      # its Gemma records have reasoning_tokens=0 — a property of the request,
+      # not the model (FINDINGS.md 2026-08-30). This arm turns it on.
+      # NB `include_reasoning: true` does NOT work: it asks the provider to
+      # SHOW thinking, it does not ENABLE it (verified 2026-08-30, still 0
+      # reasoning tokens). Only `reasoning: {enabled: true}` flips it.
+      reasoning:
+        enabled: true
+      provider:
+        order: ["deepinfra"]
+        allow_fallbacks: false
+  # odincore/ordbogen.ai (added 2026-08-23): a Danish-native provider, not
+  # on OpenRouter — separate client/auth via provider: odincore (see
+  # runner.PROVIDERS, requires ODINCORE_API_KEY in .env). No batch-endpoint
+  # evidence, so this always runs via streaming even under run_experiment.py's
+  # default batch mode (see runner.run_batch). Priced in DKK (6.25/25.00 per
+  # 1M in/out tokens, not USD) — estimate_cost.py carries a manual override
+  # since it's absent from OpenRouter's pricing catalog. Reasoning is never
+  # captured for this model: confirmed via manual probing (2026-08-23) that
+  # neither its Chat Completions nor Responses endpoint exposes reasoning
+  # text, only usage.completion_tokens_details.reasoning_tokens (a count) —
+  # same as any non-trace-exposing model, it's simply skipped by the judge's
+  # reasoning pass. max_tokens below is a first guess from probe calls
+  # (reasoning burned 308-1803 tokens, answer 9-696) — retune after a real
+  # --stream --limit smoke test; budget is a 100 DKK free credit, so keep
+  # that smoke test small.
+  # reasoning_effort DELIBERATELY UNSET (2026-08-23, evening — removed after
+  # the smoke test): with reasoning_effort: medium the model returned EMPTY
+  # content on most calls (7/8 probes on 3 of our 4 scenario prompts;
+  # finish_reason "stop", 138-185 reasoning_tokens, zero answer tokens).
+  # Streaming the same request showed the mechanism: the reasoning channel
+  # emits a leaked chat-template token (`<|user|>`) and generation aborts
+  # before the answer. Without the param the same prompts all succeed AND
+  # the model still reasons at its default depth, so nothing is lost.
+  # logprobs: true (2026-08-23, late evening): odincore exposes no reasoning
+  # FIELD anywhere (include_reasoning is a no-op; Responses' summary stays
+  # empty) — but its vLLM backend returns logprobs for the ENTIRE generation,
+  # hidden reasoning included; runner._reasoning_from_logprobs splits the
+  # token stream at usage.completion_tokens_details.reasoning_tokens and
+  # stores the recovered trace (verified byte-exact vs. message.content).
+  # No extra token cost, ~200 KB extra payload per call. The traces come
+  # back in English with a minor server-side artifact (missing spaces
+  # before digits, e.g. "for7 months") — cosmetically odd, judgeable.
+  # max_completion_tokens: odincore silently IGNORES max_tokens (verified:
+  # max_tokens=4 produced 400+ tokens) — only max_completion_tokens caps.
+  # max_tokens below is kept for the pipeline's own bookkeeping, but the
+  # extra_body value is what actually limits generation.
+  - id: odin-2-large
+    provider: odincore
+    max_tokens: 4000
+    extra_body:
+      logprobs: true
+      max_completion_tokens: 4000
+  # Candidates for the full run (uncomment to include):
+  # - id: anthropic/claude-opus-5
+  # - id: openai/gpt-5.5
+  # - id: qwen/qwen3.5-9b        # small-model contrast
+  # - id: google/gemma-4-26b-a4b-it
+
+# Naturalistic framing only (2026-08-09 — eksplicit_test dropped from the
+# design). Eval-awareness is now a secondary/passive check via the judge's
+# reasoning pass (testmistanke), not an A/B framing comparison. Keys must
+# exist in every scenario file.
+framings:
+  - naturalistisk
+
+# 3 judges (2026-08-23, up from 1) across independent provider families;
+# none is a model under test (avoids self-judging bias). Runs two passes:
+# tone (begrundelse, persona-blind) and reasoning (hidden traces:
+# testmistanke + demografi/stereotyp), see judge.py. judge_records()/
+# judge_reasoning_records() already average across judge.models and
+# analysis.judge_agreement() reports pairwise Pearson r per pass — no code
+# change needed for the 1->3 judge count, just this list. Triples judge
+# spend vs. the single-judge design (both passes now run 3x); rerun
+# estimate_cost.py before committing budget.
+judge:
+  models:
+    - openai/gpt-5.6-terra
+    - google/gemini-3.6-flash    # batchable; good quality/cost balance
+    - deepseek/deepseek-v3.2     # no OpenRouter batch endpoint (auto-falls
+                                  # back to streaming); cheapest of the 3,
+                                  # fully independent family for real
+                                  # inter-judge diversity
+  temperature: 0.0
+  max_tokens: 500      # 6-7 scores + verbatim citations
+  # Per-judge extra_body, keyed by model id (judge.py passes it on both the
+  # streaming and batch paths). gemini-3.6-flash reasons BY DEFAULT and burned
+  # ~476 of the 500-token cap on hidden thinking, truncating every tone
+  # judgement mid-JSON (found in the 2026-08-23 smoke test: 136/136 tone +
+  # 32/65 reasoning judgements failed with judge_invalid_json,
+  # finish_reason=length). effort: minimal drops reasoning to 0 tokens and
+  # the full JSON fits comfortably; reasoning cannot be disabled outright
+  # ("Reasoning is mandatory for this endpoint", 400).
+  extra_body:
+    google/gemini-3.6-flash:
+      reasoning:
+        effort: minimal
+
+paths:
+  raw_dir: results/raw
+  judged_dir: results/judged
+  analysis_dir: results/analysis
