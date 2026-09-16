@@ -28,7 +28,7 @@
 # NB: OpenRouter preauthorizes batches at worst-case max_tokens cost, so a
 # batch can 402 on a low balance even when actual billing would fit; the
 # runner skips it and resubmits on rerun.
-run_name: pilot-gemma-thinking
+run_name: thinking
 
 sampling:
   # temperature=0.0 (2026-08-11, switched from 1.0). Empirically tested first

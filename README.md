@@ -2,12 +2,12 @@
 
 Data og kode bag artiklen **[Et kig på bias i sprogmodeller anno 2026](https://ermias.ai/viden/et-kig-paa-bias-i-sprogmodeller-anno-2026)** (ermias.ai, september 2026).
 
-Denne kopi er udgivet fra det private arbejdsrepo og indeholder kun den arm, artiklen bygger på (`pilot-gemma-thinking`: alle fem modeller med reasoning slået til):
+Denne kopi er udgivet fra det private arbejdsrepo og indeholder kun den arm, artiklen bygger på (`thinking`: alle fem modeller med reasoning slået til):
 
 | Sti | Indhold |
 |---|---|
 | `results/raw/thinking.jsonl` | 11.554 rå kald for 11.520 forsøgspositioner (én JSON-linje pr. kald: nøgle, råtekst, parset afgørelse, skjult reasoning, tokenforbrug, udbyder). 34 positioner har mere end én linje, fordi fejlede forsøg er bevaret sammen med det senere vellykkede kald. |
-| `results/raw/pilot-gemma-thinking.config.json` | Den præcise konfiguration, kørslen blev udført med |
+| `results/raw/thinking.config.json` | Den præcise konfiguration, kørslen blev udført med |
 | `config/` | Scenarier (sagsakter + paraphraser), personaer, framing og eksperimentopsætning |
 | `src/biaslab/`, `scripts/` | Pipeline: kørsel, dommere, analyse, rapport — dommerscoringer og analysetabeller genskabes med `python scripts/run_judge.py` og `python scripts/analyze.py` |
 
